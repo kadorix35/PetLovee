@@ -44,7 +44,7 @@
     "@react-navigation/bottom-tabs": "^7.2.0",
     "@react-navigation/native": "^7.1.6",
     "@react-native-google-signin/google-signin": "^13.1.0",
-    "@react-native-fbsdk-next/fbsdknext": "^12.0.0",
+    "react-native-fbsdk-next": "^12.0.0",
     "@tanstack/react-query": "^5.51.23",
     "crypto-js": "^4.2.0",
     "expo": "53.0.22",
