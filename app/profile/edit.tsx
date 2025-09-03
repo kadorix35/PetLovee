@@ -140,7 +140,7 @@ export default function EditProfileScreen() {
   const handleConfirmDelete = () => {
     Alert.alert(
       'Son Uyarı',
-      'Bu işlem geri alınamaz. Tüm pet'leriniz, post'larınız ve verileriniz kalıcı olarak silinecektir.',
+      'Bu işlem geri alınamaz. Tüm petleriniz, postlarınız ve verileriniz kalıcı olarak silinecektir.',
       [
         {
           text: 'İptal',
