@@ -1,0 +1,64 @@
+{
+  "rules": {
+    "chats": {
+      "$chatId": {
+        ".read": "auth != null",
+        ".write": "auth != null && (data.child('participants').hasChild(auth.uid) || !data.exists())",
+        ".validate": "data.hasChildren(['participants', 'createdAt', 'updatedAt']) && data.child('participants').isString()",
+        "participants": {
+          ".validate": "newData.isString() && newData.val().length > 0"
+        },
+        "lastMessage": {
+          ".validate": "newData.hasChildren(['id', 'text', 'senderId', 'type', 'createdAt'])"
+        }
+      }
+    },
+    "messages": {
+      "$chatId": {
+        "$messageId": {
+          ".read": "auth != null && root.child('chats').child($chatId).child('participants').hasChild(auth.uid)",
+          ".write": "auth != null && root.child('chats').child($chatId).child('participants').hasChild(auth.uid) && (data.child('senderId').val() == auth.uid || !data.exists())",
+          ".validate": "newData.hasChildren(['chatId', 'senderId', 'text', 'type', 'createdAt']) && newData.child('senderId').val() == auth.uid"
+        }
+      }
+    },
+    "userChats": {
+      "$userId": {
+        ".read": "auth != null && auth.uid == $userId",
+        ".write": "auth != null && auth.uid == $userId",
+        "$chatId": {
+          ".validate": "newData.hasChildren(['chatId', 'joinedAt'])"
+        }
+      }
+    },
+    "userPushTokens": {
+      "$userId": {
+        ".read": "auth != null && auth.uid == $userId",
+        ".write": "auth != null && auth.uid == $userId",
+        ".validate": "newData.hasChildren(['token', 'platform', 'registeredAt'])"
+      }
+    },
+    "onlineUsers": {
+      "$userId": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $userId",
+        ".validate": "newData.hasChildren(['status', 'lastSeen'])"
+      }
+    },
+    "typing": {
+      "$chatId": {
+        "$userId": {
+          ".read": "auth != null && root.child('chats').child($chatId).child('participants').hasChild(auth.uid)",
+          ".write": "auth != null && auth.uid == $userId && root.child('chats').child($chatId).child('participants').hasChild(auth.uid)"
+        }
+      }
+    },
+    "presence": {
+      "$userId": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $userId",
+        ".validate": "newData.hasChildren(['status', 'lastSeen'])"
+      }
+    }
+  }
+}

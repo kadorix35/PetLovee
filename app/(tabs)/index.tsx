@@ -7,35 +7,98 @@ import {
   TouchableOpacity, 
   Image,
   RefreshControl,
-  Dimensions
+  Dimensions,
+  Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Video } from 'expo-av';
-import { Heart, UserPlus, UserMinus, Search, Play, MessageCircle, Share, MoveHorizontal as MoreHorizontal } from 'lucide-react-native';
+import { Heart, UserPlus, UserMinus, Search, Play, MessageCircle, Share, MoveHorizontal as MoreHorizontal, Bell } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { petProfiles, followRelations, posts } from '@/data/mockData';
 import { PetProfile, FollowRelation, Post } from '@/types/index';
+import { useNotifications } from '@/contexts/NotificationContext';
+import { useMessaging } from '@/contexts/MessagingContext';
+import { useAuth } from '@/contexts/AuthContext';
+import databaseService from '@/services/databaseService';
+import ShareModal from '@/components/ShareModal';
+import SocialStats from '@/components/SocialStats';
+import FollowButton from '@/components/FollowButton';
+import LikeButton from '@/components/LikeButton';
 
 const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { unreadCount } = useNotifications();
+  const { unreadCount: unreadMessages } = useMessaging();
+  const { user } = useAuth();
   const [profiles, setProfiles] = useState<PetProfile[]>([]);
   const [follows, setFollows] = useState<FollowRelation[]>([]);
   const [feedPosts, setFeedPosts] = useState<Post[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
-  const currentUserId = 'user1';
+  const [loading, setLoading] = useState(true);
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const currentUserId = user?.uid || '';
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (currentUserId) {
+      loadData();
+      setupRealTimeListeners();
+    }
+  }, [currentUserId]);
 
   const loadData = async () => {
-    setProfiles(petProfiles);
-    setFollows(followRelations);
-    setFeedPosts(posts);
+    if (!currentUserId) return;
+    
+    try {
+      setLoading(true);
+      
+      // Feed posts'ları yükle
+      const { posts: feedPostsData } = await databaseService.getFeedPosts(20);
+      setFeedPosts(feedPostsData);
+      
+      // Takip edilen pet'leri yükle
+      const followingData = await databaseService.getFollowing(currentUserId);
+      setFollows(followingData);
+      
+      // Pet profillerini yükle (feed'deki post'lar için)
+      const petIds = [...new Set(feedPostsData.map(post => post.petId))];
+      const profilesData = await Promise.all(
+        petIds.map(petId => databaseService.getPetProfile(petId))
+      );
+      setProfiles(profilesData.filter(Boolean) as PetProfile[]);
+      
+      // Beğenilen post'ları yükle
+      const likedPostsSet = new Set<string>();
+      for (const post of feedPostsData) {
+        const isLiked = await databaseService.isPostLiked(post.id, currentUserId);
+        if (isLiked) {
+          likedPostsSet.add(post.id);
+        }
+      }
+      setLikedPosts(likedPostsSet);
+      
+    } catch (error) {
+      console.error('Veri yükleme hatası:', error);
+      Alert.alert('Hata', 'Veriler yüklenirken bir hata oluştu');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const setupRealTimeListeners = () => {
+    if (!currentUserId) return;
+    
+    // Real-time post güncellemeleri
+    const unsubscribePosts = databaseService.onPostsChange((posts) => {
+      setFeedPosts(posts);
+    });
+    
+    return () => {
+      unsubscribePosts();
+    };
   };
 
   const onRefresh = async () => {
@@ -48,33 +111,58 @@ export default function HomeScreen() {
     return follows.some(f => f.followerId === currentUserId && f.followedId === petId);
   };
 
-  const toggleFollow = (petId: string) => {
-    if (isFollowing(petId)) {
-      setFollows(follows.filter(f => !(f.followerId === currentUserId && f.followedId === petId)));
-    } else {
-      setFollows([...follows, {
-        id: `${currentUserId}-${petId}-${Date.now()}`,
-        followerId: currentUserId,
-        followedId: petId,
-        createdAt: new Date().toISOString()
-      }]);
+  const toggleFollow = async (petId: string) => {
+    if (!currentUserId) {
+      Alert.alert('Hata', 'Giriş yapmanız gerekiyor');
+      return;
+    }
+
+    try {
+      if (isFollowing(petId)) {
+        await databaseService.unfollowPet(currentUserId, petId);
+        setFollows(follows.filter(f => !(f.followerId === currentUserId && f.followedId === petId)));
+      } else {
+        await databaseService.followPet(currentUserId, petId);
+        setFollows([...follows, {
+          id: `${currentUserId}_${petId}`,
+          followerId: currentUserId,
+          followedId: petId,
+          createdAt: new Date().toISOString()
+        }]);
+      }
+    } catch (error) {
+      console.error('Takip işlemi hatası:', error);
+      Alert.alert('Hata', 'Takip işlemi sırasında bir hata oluştu');
     }
   };
 
-  const handleLike = (postId: string) => {
-    const newLikedPosts = new Set(likedPosts);
-    if (likedPosts.has(postId)) {
-      newLikedPosts.delete(postId);
-    } else {
-      newLikedPosts.add(postId);
+  const handleLike = async (postId: string) => {
+    if (!currentUserId) {
+      Alert.alert('Hata', 'Giriş yapmanız gerekiyor');
+      return;
     }
-    setLikedPosts(newLikedPosts);
-    
-    setFeedPosts(posts => posts.map(post => 
-      post.id === postId 
-        ? { ...post, likes: likedPosts.has(postId) ? post.likes - 1 : post.likes + 1 }
-        : post
-    ));
+
+    try {
+      const newLikedPosts = new Set(likedPosts);
+      if (likedPosts.has(postId)) {
+        await databaseService.unlikePost(postId, currentUserId);
+        newLikedPosts.delete(postId);
+      } else {
+        await databaseService.likePost(postId, currentUserId);
+        newLikedPosts.add(postId);
+      }
+      setLikedPosts(newLikedPosts);
+      
+      // Optimistic update
+      setFeedPosts(posts => posts.map(post => 
+        post.id === postId 
+          ? { ...post, likes: likedPosts.has(postId) ? post.likes - 1 : post.likes + 1 }
+          : post
+      ));
+    } catch (error) {
+      console.error('Beğeni işlemi hatası:', error);
+      Alert.alert('Hata', 'Beğeni işlemi sırasında bir hata oluştu');
+    }
   };
 
   const handleComment = (postId: string) => {
@@ -82,8 +170,8 @@ export default function HomeScreen() {
   };
 
   const handleShare = (post: Post) => {
-    // Share functionality would be implemented here
-    console.log('Sharing post:', post.id);
+    setSelectedPost(post);
+    setShareModalVisible(true);
   };
 
   const handleUserPress = (petId: string) => {
@@ -109,16 +197,12 @@ export default function HomeScreen() {
               <Text style={styles.userBreed}>{pet?.breed} • {pet?.species}</Text>
             </View>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.followBtn, following && styles.followingBtn]}
-            onPress={() => pet && toggleFollow(pet.id)}
-          >
-            {following ? (
-              <UserMinus size={14} color="#FFFFFF" strokeWidth={2} />
-            ) : (
-              <UserPlus size={14} color="#FFFFFF" strokeWidth={2} />
-            )}
-          </TouchableOpacity>
+          <FollowButton
+            isFollowing={following}
+            onToggle={() => pet && toggleFollow(pet.id)}
+            size="small"
+            variant="primary"
+          />
         </View>
 
         {/* Post Media */}
@@ -144,33 +228,15 @@ export default function HomeScreen() {
 
         {/* Post Actions */}
         <View style={styles.postActions}>
-          <View style={styles.actionButtons}>
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={() => handleLike(post.id)}
-            >
-              <Heart 
-                color={isLiked ? "#FF6B6B" : "#374151"} 
-                size={22} 
-                strokeWidth={2}
-                fill={isLiked ? "#FF6B6B" : "none"}
-              />
-              <Text style={styles.actionText}>{post.likes}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={() => handleComment(post.id)}
-            >
-              <MessageCircle color="#667eea" size={22} strokeWidth={2} />
-              <Text style={styles.actionText}>{post.comments}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={() => handleShare(post)}
-            >
-              <Share color="#764ba2" size={22} strokeWidth={2} />
-            </TouchableOpacity>
-          </View>
+          <SocialStats
+            likes={post.likes}
+            comments={post.comments}
+            onLikePress={() => handleLike(post.id)}
+            onCommentPress={() => handleComment(post.id)}
+            onSharePress={() => handleShare(post)}
+            isLiked={isLiked}
+            size="medium"
+          />
         </View>
 
         {/* Post Caption */}
@@ -203,9 +269,25 @@ export default function HomeScreen() {
             </View>
             <Text style={styles.headerText}>PetLove</Text>
           </View>
-          <TouchableOpacity style={styles.searchButton}>
-            <Search color="#FFFFFF" size={20} strokeWidth={2} />
-          </TouchableOpacity>
+          <View style={styles.headerButtons}>
+            <TouchableOpacity 
+              style={styles.notificationButton}
+              onPress={() => router.push('/notifications')}
+            >
+              <Bell color="#FFFFFF" size={20} strokeWidth={2} />
+              {unreadCount > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.badgeText}>{unreadCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.searchButton}
+              onPress={() => router.push('/search')}
+            >
+              <Search color="#FFFFFF" size={20} strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
         </View>
         <Text style={styles.headerSubtext}>Sevimli dostlarınızın dünyası</Text>
       </LinearGradient>
@@ -221,6 +303,19 @@ export default function HomeScreen() {
           <PostCard key={post.id} post={post} />
         ))}
       </ScrollView>
+
+      {/* Share Modal */}
+      {selectedPost && (
+        <ShareModal
+          visible={shareModalVisible}
+          onClose={() => {
+            setShareModalVisible(false);
+            setSelectedPost(null);
+          }}
+          post={selectedPost}
+          pet={profiles.find(p => p.id === selectedPost.petId)!}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -293,6 +388,40 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
   },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  notificationButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  badgeText: {
+    fontSize: 10,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+  },
   searchButton: {
     width: 44,
     height: 44,
@@ -352,17 +481,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
   },
-  followBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#667eea',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  followingBtn: {
-    backgroundColor: '#f093fb',
-  },
+
   mediaContainer: {
     position: 'relative',
   },
@@ -398,21 +517,6 @@ const styles = StyleSheet.create({
   postActions: {
     padding: 16,
   },
-  actionButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 20,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  actionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#374151',
-  },
   captionContainer: {
     paddingHorizontal: 16,
     paddingBottom: 16,
@@ -426,5 +530,23 @@ const styles = StyleSheet.create({
   captionUser: {
     fontFamily: 'Inter-Bold',
     color: '#1F2937',
+  },
+  messageBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  messageBadgeText: {
+    fontSize: 10,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
   },
 });

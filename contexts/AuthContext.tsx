@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import AuthService, { User, AuthError } from '@/services/authService';
+import NotificationService from '@/services/notificationService';
 
 interface AuthContextType {
   user: User | null;
@@ -10,6 +11,9 @@ interface AuthContextType {
   signInWithFacebook: () => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  sendEmailVerification: () => Promise<void>;
+  checkEmailVerification: () => Promise<boolean>;
+  getCurrentUserForVerification: () => Promise<{ email: string; isVerified: boolean } | null>;
   error: string | null;
   clearError: () => void;
 }
@@ -27,9 +31,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   useEffect(() => {
     // Auth state değişikliklerini dinle
-    const unsubscribe = AuthService.onAuthStateChanged((user) => {
+    const unsubscribe = AuthService.onAuthStateChanged(async (user) => {
       setUser(user);
       setLoading(false);
+      
+      // Kullanıcı giriş yaptığında FCM token'ını kaydet
+      if (user) {
+        try {
+          await NotificationService.initialize();
+          await NotificationService.saveFCMTokenToFirestore(user.uid);
+        } catch (error) {
+          console.error('FCM token kaydedilemedi:', error);
+        }
+      }
     });
 
     return unsubscribe;
@@ -97,6 +111,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       setError(null);
       setLoading(true);
+      
+      // Çıkış yapmadan önce FCM token'ını sil
+      if (user) {
+        await NotificationService.removeFCMToken(user.uid);
+      }
+      
       await AuthService.signOut();
     } catch (error) {
       handleError(error);
@@ -114,6 +134,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
+  const sendEmailVerification = async () => {
+    try {
+      setError(null);
+      await AuthService.sendEmailVerification();
+    } catch (error) {
+      handleError(error);
+    }
+  };
+
+  const checkEmailVerification = async () => {
+    try {
+      setError(null);
+      return await AuthService.checkEmailVerification();
+    } catch (error) {
+      handleError(error);
+      return false;
+    }
+  };
+
+  const getCurrentUserForVerification = async () => {
+    try {
+      setError(null);
+      return await AuthService.getCurrentUserForVerification();
+    } catch (error) {
+      handleError(error);
+      return null;
+    }
+  };
+
   const clearError = () => {
     setError(null);
   };
@@ -127,6 +176,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     signInWithFacebook,
     signOut,
     resetPassword,
+    sendEmailVerification,
+    checkEmailVerification,
+    getCurrentUserForVerification,
     error,
     clearError,
   };

@@ -1,107 +1,236 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Dimensions,
+  Animated,
+  Image,
+  StatusBar,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Heart, Users, MapPin, Sparkles } from 'lucide-react-native';
+import { Heart, PawPrint, Users, Camera, MapPin, MessageCircle } from 'lucide-react-native';
+import { useAuth } from '@/contexts/AuthContext';
 
 const { width, height } = Dimensions.get('window');
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const { user, loading } = useAuth();
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [slideAnim] = useState(new Animated.Value(0));
+
+  const slides = [
+    {
+      id: 1,
+      title: 'Evcil Hayvan Dünyasına Hoş Geldiniz',
+      subtitle: 'Sevimli dostlarınızın fotoğraflarını paylaşın ve diğer pet sahipleriyle tanışın',
+      icon: PawPrint,
+      color: '#667eea',
+      features: ['Pet Profilleri', 'Fotoğraf Paylaşımı', 'Sosyal Etkileşim']
+    },
+    {
+      id: 2,
+      title: 'Yakındaki Veterinerleri Keşfedin',
+      subtitle: 'Harita üzerinden yakınınızdaki veteriner kliniklerini bulun ve randevu alın',
+      icon: MapPin,
+      color: '#764ba2',
+      features: ['Harita Entegrasyonu', 'Veteriner Bilgileri', 'Randevu Sistemi']
+    },
+    {
+      id: 3,
+      title: 'Pet Sahipleriyle Sohbet Edin',
+      subtitle: 'Deneyimlerinizi paylaşın, tavsiyeler alın ve yeni arkadaşlıklar kurun',
+      icon: MessageCircle,
+      color: '#f093fb',
+      features: ['Anlık Mesajlaşma', 'Grup Sohbetleri', 'Deneyim Paylaşımı']
+    }
+  ];
+
+  useEffect(() => {
+    // Kullanıcı zaten giriş yapmışsa ana sayfaya yönlendir
+    if (!loading && user) {
+      router.replace('/(tabs)');
+      return;
+    }
+
+    // Animasyonları başlat
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Otomatik slide geçişi
+    const interval = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % slides.length);
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [user, loading]);
 
   const handleGetStarted = () => {
-    router.replace('/(tabs)');
+    router.push('/auth/register');
   };
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <LinearGradient
-        colors={['#667eea', '#764ba2', '#f093fb']}
-        style={styles.backgroundGradient}
+  const handleSignIn = () => {
+    router.push('/auth/login');
+  };
+
+  const handleSkip = () => {
+    router.push('/auth/login');
+  };
+
+  const renderSlide = (slide: typeof slides[0], index: number) => {
+    const IconComponent = slide.icon;
+    const isActive = index === currentSlide;
+
+    return (
+      <Animated.View
+        key={slide.id}
+        style={[
+          styles.slide,
+          {
+            opacity: isActive ? 1 : 0.3,
+            transform: [
+              {
+                scale: isActive ? 1 : 0.9,
+              },
+            ],
+          },
+        ]}
       >
-        <View style={styles.content}>
-          {/* Floating Elements */}
-          <View style={styles.floatingElements}>
-            <View style={[styles.floatingCircle, styles.circle1]} />
-            <View style={[styles.floatingCircle, styles.circle2]} />
-            <View style={[styles.floatingCircle, styles.circle3]} />
-          </View>
-
-          {/* Hero Section */}
-          <View style={styles.heroSection}>
-            <View style={styles.logoContainer}>
-              <View style={styles.logoBackground}>
-                <View style={styles.pawIcon}>
-                  <View style={styles.pawPad} />
-                  <View style={[styles.pawToe, styles.toe1]} />
-                  <View style={[styles.pawToe, styles.toe2]} />
-                  <View style={[styles.pawToe, styles.toe3]} />
-                  <View style={[styles.pawToe, styles.toe4]} />
-                </View>
-              </View>
-              <Text style={styles.logoText}>PetLove</Text>
-              <View style={styles.sparkleContainer}>
-                <Sparkles color="#FFD700" size={20} strokeWidth={2} />
-              </View>
+        <View style={[styles.iconContainer, { backgroundColor: slide.color }]}>
+          <IconComponent color="#FFFFFF" size={40} strokeWidth={2} />
+        </View>
+        
+        <Text style={styles.slideTitle}>{slide.title}</Text>
+        <Text style={styles.slideSubtitle}>{slide.subtitle}</Text>
+        
+        <View style={styles.featuresContainer}>
+          {slide.features.map((feature, featureIndex) => (
+            <View key={featureIndex} style={styles.featureItem}>
+              <View style={[styles.featureDot, { backgroundColor: slide.color }]} />
+              <Text style={styles.featureText}>{feature}</Text>
             </View>
+          ))}
+        </View>
+      </Animated.View>
+    );
+  };
 
-            <Image
-              source={{ uri: 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=800' }}
-              style={styles.heroImage}
-              resizeMode="cover"
-            />
-          </View>
+  const renderDots = () => {
+    return (
+      <View style={styles.dotsContainer}>
+        {slides.map((_, index) => (
+          <TouchableOpacity
+            key={index}
+            style={[
+              styles.dot,
+              {
+                backgroundColor: index === currentSlide ? '#667eea' : '#E5E7EB',
+                width: index === currentSlide ? 24 : 8,
+              },
+            ]}
+            onPress={() => setCurrentSlide(index)}
+          />
+        ))}
+      </View>
+    );
+  };
 
-          {/* Content Section */}
-          <View style={styles.contentSection}>
-            <Text style={styles.title}>Evcil Hayvan Dostları{'\n'}Buluşuyor</Text>
-            <Text style={styles.subtitle}>
-              Sevimli dostlarınız için profil oluşturun, fotoğraf ve videolarınızı paylaşın, 
-              diğer pet severlerle bağlantı kurun ve yakınınızdaki veteriner kliniklerini keşfedin.
-            </Text>
-
-            <View style={styles.featuresGrid}>
-              <View style={styles.featureCard}>
-                <View style={styles.featureIcon}>
-                  <Heart color="#667eea" size={24} strokeWidth={2} />
-                </View>
-                <Text style={styles.featureTitle}>Pet Profilleri</Text>
-                <Text style={styles.featureDesc}>Fotoğraf & Video</Text>
-              </View>
-              
-              <View style={styles.featureCard}>
-                <View style={styles.featureIcon}>
-                  <Users color="#764ba2" size={24} strokeWidth={2} />
-                </View>
-                <Text style={styles.featureTitle}>Sosyal Ağ</Text>
-                <Text style={styles.featureDesc}>Takip & Paylaşım</Text>
-              </View>
-              
-              <View style={styles.featureCard}>
-                <View style={styles.featureIcon}>
-                  <MapPin color="#f093fb" size={24} strokeWidth={2} />
-                </View>
-                <Text style={styles.featureTitle}>Veteriner</Text>
-                <Text style={styles.featureDesc}>Harita & Klinikler</Text>
-              </View>
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <LinearGradient
+          colors={['#667eea', '#764ba2']}
+          style={styles.loadingGradient}
+        >
+          <View style={styles.loadingContent}>
+            <View style={styles.loadingPaw}>
+              <PawPrint color="#FFFFFF" size={60} strokeWidth={2} />
             </View>
+            <Text style={styles.loadingText}>PetLove</Text>
+            <Text style={styles.loadingSubtext}>Yükleniyor...</Text>
           </View>
+        </LinearGradient>
+      </SafeAreaView>
+    );
+  }
 
-          {/* CTA Button */}
-          <TouchableOpacity style={styles.ctaButton} onPress={handleGetStarted}>
-            <LinearGradient
-              colors={['#667eea', '#764ba2']}
-              style={styles.ctaGradient}
-            >
-              <Text style={styles.ctaText}>Hemen Başla</Text>
-              <View style={styles.ctaArrow}>
-                <Text style={styles.ctaArrowText}>→</Text>
-              </View>
-            </LinearGradient>
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#667eea" />
+      
+      <LinearGradient
+        colors={['#667eea', '#764ba2']}
+        style={styles.header}
+      >
+        <View style={styles.headerContent}>
+          <View style={styles.logoContainer}>
+            <View style={styles.logoBackground}>
+              <PawPrint color="#FFFFFF" size={32} strokeWidth={2} />
+            </View>
+            <Text style={styles.logoText}>PetLove</Text>
+          </View>
+          
+          <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
+            <Text style={styles.skipText}>Atla</Text>
           </TouchableOpacity>
         </View>
       </LinearGradient>
+
+      <Animated.View
+        style={[
+          styles.content,
+          {
+            opacity: fadeAnim,
+            transform: [
+              {
+                translateY: slideAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [50, 0],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <View style={styles.slidesContainer}>
+          {slides.map((slide, index) => renderSlide(slide, index))}
+        </View>
+
+        {renderDots()}
+
+        <View style={styles.buttonsContainer}>
+          <TouchableOpacity
+            style={styles.getStartedButton}
+            onPress={handleGetStarted}
+          >
+            <LinearGradient
+              colors={['#667eea', '#764ba2']}
+              style={styles.getStartedGradient}
+            >
+              <Text style={styles.getStartedText}>Başlayalım</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.signInButton} onPress={handleSignIn}>
+            <Text style={styles.signInText}>Zaten hesabım var</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -109,223 +238,172 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#F8FAFC',
   },
-  backgroundGradient: {
+  loadingContainer: {
     flex: 1,
+  },
+  loadingGradient: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingContent: {
+    alignItems: 'center',
+  },
+  loadingPaw: {
+    marginBottom: 20,
+  },
+  loadingText: {
+    fontSize: 32,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  loadingSubtext: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  header: {
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  logoBackground: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  logoText: {
+    fontSize: 24,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+  },
+  skipButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  skipText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
   content: {
     flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 40,
+  },
+  slidesContainer: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  slide: {
+    alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 20,
-    justifyContent: 'space-between',
   },
-  floatingElements: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  floatingCircle: {
-    position: 'absolute',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 50,
-  },
-  circle1: {
-    width: 100,
-    height: 100,
-    top: 100,
-    right: -20,
-  },
-  circle2: {
-    width: 60,
-    height: 60,
-    top: 300,
-    left: -10,
-  },
-  circle3: {
+  iconContainer: {
     width: 80,
     height: 80,
-    bottom: 200,
-    right: 20,
-  },
-  heroSection: {
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
-    position: 'relative',
-  },
-  logoBackground: {
-    width: 70,
-    height: 70,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 35,
+    borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 32,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  slideTitle: {
+    fontSize: 24,
+    fontFamily: 'Inter-Bold',
+    color: '#1F2937',
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 32,
+  },
+  slideSubtitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 24,
+  },
+  featuresContainer: {
+    alignItems: 'flex-start',
+  },
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 12,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
-  pawIcon: {
-    width: 35,
-    height: 35,
-    position: 'relative',
-  },
-  pawPad: {
-    width: 20,
-    height: 16,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    position: 'absolute',
-    bottom: 0,
-    left: 10,
-  },
-  pawToe: {
+  featureDot: {
     width: 8,
-    height: 10,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 5,
-    position: 'absolute',
+    height: 8,
+    borderRadius: 4,
+    marginRight: 12,
   },
-  toe1: {
-    top: 0,
-    left: 6,
-  },
-  toe2: {
-    top: 2,
-    left: 16,
-  },
-  toe3: {
-    top: 2,
-    left: 26,
-  },
-  toe4: {
-    top: 6,
-    left: 34,
-  },
-  logoText: {
-    fontSize: 36,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
-    letterSpacing: -1,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  sparkleContainer: {
-    position: 'absolute',
-    top: -10,
-    right: -30,
-  },
-  heroImage: {
-    width: width * 0.5,
-    height: width * 0.5,
-    borderRadius: width * 0.25,
-    borderWidth: 4,
-    borderColor: 'rgba(255, 255, 255, 0.8)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-  },
-  contentSection: {
-    alignItems: 'center',
-    paddingHorizontal: 8,
-  },
-  title: {
-    fontSize: 28,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
-    textAlign: 'center',
-    marginBottom: 12,
-    lineHeight: 34,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  subtitle: {
+  featureText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: 'rgba(255, 255, 255, 0.9)',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
-    paddingHorizontal: 8,
+    fontFamily: 'Inter-SemiBold',
+    color: '#374151',
   },
-  featuresGrid: {
+  dotsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    gap: 12,
-  },
-  featureCard: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  featureIcon: {
-    width: 40,
-    height: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    marginVertical: 32,
   },
-  featureTitle: {
-    fontSize: 12,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
-    marginBottom: 2,
-    textAlign: 'center',
+  dot: {
+    height: 8,
+    borderRadius: 4,
+    marginHorizontal: 4,
   },
-  featureDesc: {
-    fontSize: 10,
-    fontFamily: 'Inter-Regular',
-    color: 'rgba(255, 255, 255, 0.8)',
-    textAlign: 'center',
+  buttonsContainer: {
+    paddingBottom: 40,
   },
-  ctaButton: {
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 12,
-  },
-  ctaGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 28,
-    borderRadius: 20,
-    gap: 10,
-  },
-  ctaText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
-  },
-  ctaArrow: {
-    width: 32,
-    height: 32,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  getStartedButton: {
     borderRadius: 16,
-    justifyContent: 'center',
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  getStartedGradient: {
+    paddingVertical: 16,
+    borderRadius: 16,
     alignItems: 'center',
   },
-  ctaArrowText: {
+  getStartedText: {
     fontSize: 16,
+    fontFamily: 'Inter-Bold',
     color: '#FFFFFF',
-    fontWeight: 'bold',
+  },
+  signInButton: {
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  signInText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#667eea',
   },
 });

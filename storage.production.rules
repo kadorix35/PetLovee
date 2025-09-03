@@ -1,0 +1,84 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Kullanıcı dosyaları - sadece kendi dosyalarına erişim
+    match /users/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && 
+        request.auth.uid == userId &&
+        isValidFileType(request.resource.contentType) &&
+        isValidFileSize(request.resource.size);
+    }
+    
+    // Pet profil fotoğrafları
+    match /users/{userId}/pets/{petId}/profile/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        request.auth.uid == userId &&
+        isValidImageFile(request.resource.contentType) &&
+        isValidFileSize(request.resource.size) &&
+        isValidFileName(fileName);
+    }
+    
+    // Post medyaları
+    match /users/{userId}/posts/{postId}/media/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        request.auth.uid == userId &&
+        isValidMediaFile(request.resource.contentType) &&
+        isValidFileSize(request.resource.size) &&
+        isValidFileName(fileName);
+    }
+    
+    // Genel güvenlik - diğer tüm dosyalar için erişimi reddet
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+  
+  // Dosya türü doğrulama fonksiyonları
+  function isValidFileType(contentType) {
+    return contentType in [
+      'image/jpeg',
+      'image/png', 
+      'image/gif',
+      'image/webp',
+      'video/mp4',
+      'video/quicktime',
+      'video/x-msvideo'
+    ];
+  }
+  
+  function isValidImageFile(contentType) {
+    return contentType in [
+      'image/jpeg',
+      'image/png',
+      'image/gif', 
+      'image/webp'
+    ];
+  }
+  
+  function isValidMediaFile(contentType) {
+    return contentType in [
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'video/mp4',
+      'video/quicktime',
+      'video/x-msvideo'
+    ];
+  }
+  
+  function isValidFileSize(size) {
+    // Maksimum 10MB
+    return size <= 10 * 1024 * 1024;
+  }
+  
+  function isValidFileName(fileName) {
+    // Dosya adı güvenlik kontrolü
+    return fileName.matches('^[a-zA-Z0-9._-]+$') && 
+           fileName.size() > 0 && 
+           fileName.size() <= 255;
+  }
+}

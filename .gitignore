@@ -148,6 +148,19 @@ coverage/
 .env
 .env.test
 .env.production
+.env.local
+.env.development
+
+# Firebase production config files
+firebase.production.json
+google-services.production.json
+GoogleService-Info.production.plist
+
+# Security sensitive files
+*.pem
+*.key
+*.p12
+*.mobileprovision
 
 # Stores VSCode versions used for testing VSCode extensions
 .vscode-test

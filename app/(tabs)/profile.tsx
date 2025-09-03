@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Video } from 'expo-video';
-import { Camera, CreditCard as Edit3, Save, X, Plus, Play, Grid2x2 as Grid, User, ChevronDown } from 'lucide-react-native';
+import { Camera, CreditCard as Edit3, Save, X, Plus, Play, Grid2x2 as Grid, User, ChevronDown, Settings, Heart } from 'lucide-react-native';
 import { FlatGrid } from 'react-native-super-grid';
 import { useRouter } from 'expo-router';
 
@@ -250,12 +250,26 @@ export default function ProfileScreen() {
             <Text style={styles.profileBreed}>{selectedPet.breed} • {selectedPet.species}</Text>
             <Text style={styles.profileAge}>{selectedPet.age} yaşında • {selectedPet.gender}</Text>
           </View>
-          <TouchableOpacity
-            style={styles.editButton}
-            onPress={() => setShowCreateForm(true)}
-          >
-            <Edit3 color="#FFFFFF" size={20} strokeWidth={2} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.headerActionButton}
+              onPress={() => router.push('/pet/list')}
+            >
+              <Heart color="#FFFFFF" size={20} strokeWidth={2} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.headerActionButton}
+              onPress={() => router.push('/profile/settings')}
+            >
+              <Settings color="#FFFFFF" size={20} strokeWidth={2} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.headerActionButton}
+              onPress={() => setShowCreateForm(true)}
+            >
+              <Edit3 color="#FFFFFF" size={20} strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.statsContainer}>
@@ -381,13 +395,21 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </Modal>
       
-      {/* Floating Add Button */}
-      <TouchableOpacity
-        style={styles.floatingAddButton}
-        onPress={() => setShowCreateForm(true)}
-      >
-        <Plus color="#FFFFFF" size={24} strokeWidth={2} />
-      </TouchableOpacity>
+      {/* Floating Action Buttons */}
+      <View style={styles.floatingButtons}>
+        <TouchableOpacity
+          style={styles.floatingButton}
+          onPress={() => router.push('/pet/add')}
+        >
+          <Heart color="#FFFFFF" size={20} strokeWidth={2} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.floatingAddButton}
+          onPress={() => setShowCreateForm(true)}
+        >
+          <Plus color="#FFFFFF" size={24} strokeWidth={2} />
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
@@ -436,10 +458,14 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: 'rgba(255, 255, 255, 0.8)',
   },
-  editButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  headerActionButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -844,10 +870,27 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
-  floatingAddButton: {
+  floatingButtons: {
     position: 'absolute',
     bottom: 30,
     right: 20,
+    alignItems: 'center',
+    gap: 12,
+  },
+  floatingButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#10B981',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  floatingAddButton: {
     width: 56,
     height: 56,
     borderRadius: 28,

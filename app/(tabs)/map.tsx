@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,10 +8,15 @@ import {
   Modal,
   Linking,
   Dimensions,
+  Alert,
+  PermissionsAndroid,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MapPin, Phone, Clock, Navigation, X, Star, Filter } from 'lucide-react-native';
+import { MapPin, Phone, Clock, Navigation, X, Star, Filter, MyLocation } from 'lucide-react-native';
+import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import Geolocation from 'react-native-geolocation-service';
 import { veterinaryClinics } from '@/data/mockData';
 import { VeterinaryClinic } from '@/types/index';
 
@@ -21,10 +26,107 @@ export default function MapScreen() {
   const [selectedClinic, setSelectedClinic] = useState<VeterinaryClinic | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [userLocation, setUserLocation] = useState<{latitude: number, longitude: number} | null>(null);
+  const [region, setRegion] = useState<Region>({
+    latitude: 41.0082, // İstanbul koordinatları
+    longitude: 28.9784,
+    latitudeDelta: 0.0922,
+    longitudeDelta: 0.0421,
+  });
+  const mapRef = useRef<MapView>(null);
+
+  // Konum izni iste
+  const requestLocationPermission = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: 'Konum İzni',
+            message: 'PetLovee uygulaması yakınınızdaki veteriner kliniklerini gösterebilmek için konum bilginize ihtiyaç duyuyor.',
+            buttonNeutral: 'Daha Sonra Sor',
+            buttonNegative: 'İptal',
+            buttonPositive: 'İzin Ver',
+          }
+        );
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      } catch (err) {
+        console.warn(err);
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // Kullanıcı konumunu al
+  const getCurrentLocation = () => {
+    Geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setUserLocation({ latitude, longitude });
+        setRegion({
+          latitude,
+          longitude,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421,
+        });
+        
+        if (mapRef.current) {
+          mapRef.current.animateToRegion({
+            latitude,
+            longitude,
+            latitudeDelta: 0.0922,
+            longitudeDelta: 0.0421,
+          }, 1000);
+        }
+      },
+      (error) => {
+        console.log(error.code, error.message);
+        Alert.alert('Hata', 'Konum bilgisi alınamadı. Lütfen konum iznini kontrol edin.');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+    );
+  };
+
+  // Konum izni kontrol et ve konum al
+  useEffect(() => {
+    const initLocation = async () => {
+      const hasPermission = await requestLocationPermission();
+      if (hasPermission) {
+        getCurrentLocation();
+      }
+    };
+    initLocation();
+  }, []);
 
   const handleClinicPress = (clinic: VeterinaryClinic) => {
     setSelectedClinic(clinic);
     setShowDetails(true);
+    
+    // Haritayı seçilen kliniğe odakla
+    if (mapRef.current) {
+      mapRef.current.animateToRegion({
+        latitude: clinic.latitude,
+        longitude: clinic.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      }, 1000);
+    }
+  };
+
+  const handleMyLocationPress = () => {
+    if (userLocation) {
+      if (mapRef.current) {
+        mapRef.current.animateToRegion({
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421,
+        }, 1000);
+      }
+    } else {
+      getCurrentLocation();
+    }
   };
 
   const handleCall = (phone: string) => {
@@ -180,26 +282,67 @@ export default function MapScreen() {
         </View>
       </LinearGradient>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.mapPlaceholder}>
+      <View style={styles.mapContainer}>
+        <MapView
+          ref={mapRef}
+          provider={PROVIDER_GOOGLE}
+          style={styles.map}
+          region={region}
+          showsUserLocation={true}
+          showsMyLocationButton={false}
+          showsCompass={true}
+          showsScale={true}
+          onRegionChangeComplete={setRegion}
+        >
+          {/* Kullanıcı konumu marker'ı */}
+          {userLocation && (
+            <Marker
+              coordinate={userLocation}
+              title="Konumunuz"
+              description="Şu anda buradasınız"
+              pinColor="blue"
+            />
+          )}
+          
+          {/* Veteriner klinikleri marker'ları */}
+          {veterinaryClinics.map((clinic) => (
+            <Marker
+              key={clinic.id}
+              coordinate={{
+                latitude: clinic.latitude,
+                longitude: clinic.longitude,
+              }}
+              title={clinic.name}
+              description={`${clinic.rating} ⭐ - ${clinic.distance}`}
+              onPress={() => handleClinicPress(clinic)}
+            >
+              <View style={styles.customMarker}>
+                <LinearGradient
+                  colors={clinic.isOpen ? ['#10B981', '#059669'] : ['#EF4444', '#DC2626']}
+                  style={styles.markerGradient}
+                >
+                  <MapPin color="#FFFFFF" size={20} strokeWidth={2} />
+                </LinearGradient>
+              </View>
+            </Marker>
+          ))}
+        </MapView>
+        
+        {/* Konum butonu */}
+        <TouchableOpacity
+          style={styles.myLocationButton}
+          onPress={handleMyLocationPress}
+        >
           <LinearGradient
-            colors={['#F3F4F6', '#E5E7EB']}
-            style={styles.mapGradient}
+            colors={['#667eea', '#764ba2']}
+            style={styles.myLocationGradient}
           >
-            <View style={styles.mapIconContainer}>
-              <MapPin color="#667eea" size={48} strokeWidth={2} />
-            </View>
-            <Text style={styles.mapPlaceholderText}>İnteraktif Harita</Text>
-            <Text style={styles.mapPlaceholderSubtext}>
-              Yakınınızdaki veteriner klinikleri burada görünecek
-            </Text>
-            <View style={styles.mapPins}>
-              <View style={[styles.mapPin, { top: 40, left: 60 }]} />
-              <View style={[styles.mapPin, { top: 80, right: 80 }]} />
-              <View style={[styles.mapPin, { bottom: 60, left: 100 }]} />
-            </View>
+            <MyLocation color="#FFFFFF" size={24} strokeWidth={2} />
           </LinearGradient>
-        </View>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
 
         <View style={styles.listHeader}>
           <Text style={styles.sectionTitle}>Yakınınızdaki Klinikler</Text>
@@ -261,11 +404,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
-  content: {
-    flex: 1,
-    paddingTop: 16,
-  },
-  mapPlaceholder: {
+  mapContainer: {
+    height: 300,
     marginHorizontal: 16,
     marginBottom: 24,
     borderRadius: 20,
@@ -276,53 +416,49 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 6,
   },
-  mapGradient: {
-    padding: 40,
-    alignItems: 'center',
-    position: 'relative',
-    minHeight: 200,
+  map: {
+    flex: 1,
   },
-  mapIconContainer: {
-    width: 80,
-    height: 80,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 40,
-    justifyContent: 'center',
+  customMarker: {
     alignItems: 'center',
-    marginBottom: 16,
-    shadowColor: '#667eea',
+    justifyContent: 'center',
+  },
+  markerGradient: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  myLocationButton: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    borderRadius: 25,
+    overflow: 'hidden',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
+    elevation: 8,
   },
-  mapPlaceholderText: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#374151',
-    marginBottom: 8,
+  myLocationGradient: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  mapPlaceholderSubtext: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
+  content: {
+    flex: 1,
+    paddingTop: 16,
   },
-  mapPins: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  mapPin: {
-    position: 'absolute',
-    width: 12,
-    height: 12,
-    backgroundColor: '#EF4444',
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
+
   listHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',

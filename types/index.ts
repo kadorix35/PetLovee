@@ -36,6 +36,29 @@ export interface User {
   name: string;
   email: string;
   createdAt: string;
+  displayName?: string;
+  photoURL?: string;
+  bio?: string;
+  phone?: string;
+  location?: string;
+  isEmailVerified?: boolean;
+  preferences?: UserPreferences;
+}
+
+export interface UserPreferences {
+  notifications: {
+    email: boolean;
+    push: boolean;
+    sms: boolean;
+  };
+  privacy: {
+    profileVisibility: 'public' | 'friends' | 'private';
+    showEmail: boolean;
+    showPhone: boolean;
+    showLocation: boolean;
+  };
+  language: string;
+  theme: 'light' | 'dark' | 'auto';
 }
 
 export interface Post {
@@ -43,6 +66,7 @@ export interface Post {
   petId: string;
   type: 'photo' | 'video';
   mediaUrl: string;
+  videoUrl?: string;
   caption: string;
   likes: number;
   comments: number;
@@ -56,4 +80,34 @@ export interface Comment {
   userAvatar: string;
   text: string;
   createdAt: string;
+}
+
+export interface Chat {
+  id: string;
+  participants: string[];
+  lastMessage?: Message;
+  lastMessageAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Message {
+  id: string;
+  chatId: string;
+  senderId: string;
+  receiverId: string;
+  text: string;
+  type: 'text' | 'image' | 'video' | 'location';
+  mediaUrl?: string;
+  isRead: boolean;
+  createdAt: string;
+  readAt?: string;
+}
+
+export interface ChatParticipant {
+  id: string;
+  name: string;
+  avatar: string;
+  isOnline: boolean;
+  lastSeen?: string;
 }

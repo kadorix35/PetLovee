@@ -18,14 +18,20 @@ import { LinearGradient } from 'expo-linear-gradient';
 // import { Video } from 'expo-video'; // Geçici olarak kapatıldı
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowLeft, Heart, MessageCircle, Share, Send, MoveHorizontal as MoreHorizontal, CreditCard as Edit3, Trash2, X } from 'lucide-react-native';
-import { petProfiles, posts } from '@/data/mockData';
 import { Post, PetProfile, Comment } from '@/types/index';
+import { useAuth } from '@/contexts/AuthContext';
+import databaseService from '@/services/databaseService';
+import ShareModal from '@/components/ShareModal';
+import SocialStats from '@/components/SocialStats';
+import CommentItem from '@/components/CommentItem';
+import LikeButton from '@/components/LikeButton';
 
 const { width } = Dimensions.get('window');
 
 export default function PostDetailScreen() {
   const { postId } = useLocalSearchParams<{ postId: string }>();
   const router = useRouter();
+  const { user } = useAuth();
   const [post, setPost] = useState<Post | null>(null);
   const [pet, setPet] = useState<PetProfile | null>(null);
   const [isLiked, setIsLiked] = useState(false);
@@ -35,75 +41,162 @@ export default function PostDetailScreen() {
   const [showOptions, setShowOptions] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editCaption, setEditCaption] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [commentLoading, setCommentLoading] = useState(false);
+  const [shareModalVisible, setShareModalVisible] = useState(false);
   const videoRef = useRef<Video>(null);
-  const currentUserId = 'user1';
+  const currentUserId = user?.uid || '';
 
   useEffect(() => {
-    if (postId) {
-      const foundPost = posts.find(p => p.id === postId);
-      if (foundPost) {
-        setPost(foundPost);
-        setLikes(foundPost.likes);
-        setEditCaption(foundPost.caption);
-        
-        const foundPet = petProfiles.find(p => p.id === foundPost.petId);
-        setPet(foundPet || null);
-
-        // Mock comments
-        setComments([
-          {
-            id: '1',
-            userId: 'user2',
-            userName: 'Ayşe',
-            userAvatar: 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=100',
-            text: 'Çok tatlı! 😍',
-            createdAt: '2024-02-15T11:00:00Z',
-          },
-          {
-            id: '2',
-            userId: 'user3',
-            userName: 'Mehmet',
-            userAvatar: 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=100',
-            text: 'Harika bir fotoğraf! Bizim köpeğimiz de böyle seviyor parkı.',
-            createdAt: '2024-02-15T12:30:00Z',
-          },
-        ]);
-      }
+    if (postId && currentUserId) {
+      loadPostData();
+      setupRealTimeListeners();
     }
-  }, [postId]);
+  }, [postId, currentUserId]);
 
-  const handleLike = () => {
-    setIsLiked(!isLiked);
-    setLikes(prev => isLiked ? prev - 1 : prev + 1);
+  const setupRealTimeListeners = () => {
+    if (!postId) return;
+    
+    // Real-time post güncellemeleri
+    const unsubscribePost = databaseService.onPostChange(postId, (updatedPost) => {
+      if (updatedPost) {
+        setPost(updatedPost);
+        setLikes(updatedPost.likes);
+      }
+    });
+    
+    // Real-time yorum güncellemeleri
+    const unsubscribeComments = databaseService.onCommentsChange(postId, (updatedComments) => {
+      setComments(updatedComments);
+    });
+    
+    return () => {
+      unsubscribePost();
+      unsubscribeComments();
+    };
+  };
+
+  const loadPostData = async () => {
+    if (!postId || !currentUserId) return;
+    
+    try {
+      setLoading(true);
+      
+      // Post'u yükle
+      const postData = await databaseService.getPost(postId);
+      if (!postData) {
+        Alert.alert('Hata', 'Gönderi bulunamadı');
+        router.back();
+        return;
+      }
+      
+      setPost(postData);
+      setLikes(postData.likes);
+      setEditCaption(postData.caption);
+      
+      // Pet profilini yükle
+      const petData = await databaseService.getPetProfile(postData.petId);
+      setPet(petData);
+      
+      // Beğeni durumunu kontrol et
+      const liked = await databaseService.isPostLiked(postId, currentUserId);
+      setIsLiked(liked);
+      
+      // Yorumları yükle
+      const commentsData = await databaseService.getComments(postId);
+      setComments(commentsData);
+      
+    } catch (error) {
+      console.error('Post yükleme hatası:', error);
+      Alert.alert('Hata', 'Gönderi yüklenirken bir hata oluştu');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLike = async () => {
+    if (!currentUserId || !postId) {
+      Alert.alert('Hata', 'Giriş yapmanız gerekiyor');
+      return;
+    }
+
+    try {
+      if (isLiked) {
+        await databaseService.unlikePost(postId, currentUserId);
+        setIsLiked(false);
+        setLikes(prev => prev - 1);
+      } else {
+        await databaseService.likePost(postId, currentUserId);
+        setIsLiked(true);
+        setLikes(prev => prev + 1);
+      }
+    } catch (error) {
+      console.error('Beğeni işlemi hatası:', error);
+      Alert.alert('Hata', 'Beğeni işlemi sırasında bir hata oluştu');
+    }
   };
 
   const handleShare = () => {
-    Alert.alert('Paylaş', 'Bu gönderiyi paylaşmak istiyor musunuz?', [
-      { text: 'İptal', style: 'cancel' },
-      { text: 'Paylaş', onPress: () => Alert.alert('Başarılı', 'Gönderi paylaşıldı!') }
-    ]);
+    setShareModalVisible(true);
   };
 
-  const handleAddComment = () => {
-    if (newComment.trim()) {
-      const comment: Comment = {
-        id: Date.now().toString(),
+  const handleAddComment = async () => {
+    if (!newComment.trim() || !currentUserId || !postId) return;
+    
+    try {
+      setCommentLoading(true);
+      
+      // Spam kontrolü
+      const isSpam = await databaseService.detectSpam(newComment.trim(), currentUserId);
+      if (isSpam) {
+        Alert.alert('Uyarı', 'Çok benzer yorumlar gönderiyorsunuz. Lütfen bekleyin.');
+        return;
+      }
+      
+      // Rate limiting kontrolü
+      const canComment = await databaseService.canUserComment(currentUserId, postId);
+      if (!canComment) {
+        Alert.alert('Uyarı', 'Çok hızlı yorum yapıyorsunuz. Lütfen bekleyin.');
+        return;
+      }
+      
+      const commentData = {
         userId: currentUserId,
-        userName: 'Sen',
-        userAvatar: 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=100',
+        userName: user?.displayName || 'Kullanıcı',
+        userAvatar: user?.photoURL || 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=100',
         text: newComment.trim(),
+      };
+      
+      await databaseService.addComment(postId, commentData, currentUserId);
+      
+      // Optimistic update
+      const newCommentObj: Comment = {
+        id: Date.now().toString(),
+        ...commentData,
         createdAt: new Date().toISOString(),
       };
-      setComments([...comments, comment]);
+      setComments([...comments, newCommentObj]);
       setNewComment('');
+      
+    } catch (error) {
+      console.error('Yorum ekleme hatası:', error);
+      Alert.alert('Hata', 'Yorum eklenirken bir hata oluştu');
+    } finally {
+      setCommentLoading(false);
     }
   };
 
-  const handleEditPost = () => {
-    if (post) {
+  const handleEditPost = async () => {
+    if (!post || !postId) return;
+    
+    try {
+      await databaseService.updatePost(postId, { caption: editCaption });
       setPost({ ...post, caption: editCaption });
       setShowEditModal(false);
       Alert.alert('Başarılı', 'Gönderi güncellendi!');
+    } catch (error) {
+      console.error('Post güncelleme hatası:', error);
+      Alert.alert('Hata', 'Gönderi güncellenirken bir hata oluştu');
     }
   };
 
@@ -116,16 +209,32 @@ export default function PostDetailScreen() {
         { 
           text: 'Sil', 
           style: 'destructive',
-          onPress: () => {
-            Alert.alert('Başarılı', 'Gönderi silindi!');
-            router.back();
+          onPress: async () => {
+            try {
+              await databaseService.deletePost(postId!);
+              Alert.alert('Başarılı', 'Gönderi silindi!');
+              router.back();
+            } catch (error) {
+              console.error('Post silme hatası:', error);
+              Alert.alert('Hata', 'Gönderi silinirken bir hata oluştu');
+            }
           }
         }
       ]
     );
   };
 
-  const isOwnPost = post?.petId === 'pet1'; // Current user's pet
+  const isOwnPost = pet?.ownerId === currentUserId;
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Yükleniyor...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!post || !pet) {
     return (
@@ -185,32 +294,15 @@ export default function PostDetailScreen() {
 
         {/* Post Actions */}
         <View style={styles.postActions}>
-          <View style={styles.actionButtons}>
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={handleLike}
-            >
-              <Heart 
-                color={isLiked ? "#FF6B6B" : "#374151"} 
-                size={24} 
-                strokeWidth={2}
-                fill={isLiked ? "#FF6B6B" : "none"}
-              />
-              <Text style={[styles.actionText, isLiked && styles.likedText]}>
-                {likes}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
-              <MessageCircle color="#667eea" size={24} strokeWidth={2} />
-              <Text style={styles.actionText}>{comments.length}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={handleShare}
-            >
-              <Share color="#764ba2" size={24} strokeWidth={2} />
-            </TouchableOpacity>
-          </View>
+          <SocialStats
+            likes={likes}
+            comments={comments.length}
+            onLikePress={handleLike}
+            onCommentPress={() => {}}
+            onSharePress={handleShare}
+            isLiked={isLiked}
+            size="large"
+          />
         </View>
 
         {/* Post Caption */}
@@ -224,17 +316,18 @@ export default function PostDetailScreen() {
         <View style={styles.commentsSection}>
           <Text style={styles.commentsTitle}>Yorumlar ({comments.length})</Text>
           {comments.map((comment) => (
-            <View key={comment.id} style={styles.commentItem}>
-              <Image source={{ uri: comment.userAvatar }} style={styles.commentAvatar} />
-              <View style={styles.commentContent}>
-                <Text style={styles.commentText}>
-                  <Text style={styles.commentUser}>{comment.userName}</Text> {comment.text}
-                </Text>
-                <Text style={styles.commentTime}>
-                  {new Date(comment.createdAt).toLocaleDateString('tr-TR')}
-                </Text>
-              </View>
-            </View>
+            <CommentItem
+              key={comment.id}
+              comment={comment}
+              currentUserId={currentUserId}
+              onReply={(commentId, userName) => {
+                setNewComment(`@${userName} `);
+              }}
+              onDelete={(commentId) => {
+                // Yorum silme işlemi
+                console.log('Delete comment:', commentId);
+              }}
+            />
           ))}
         </View>
       </ScrollView>
@@ -256,7 +349,7 @@ export default function PostDetailScreen() {
           <TouchableOpacity 
             style={[styles.sendButton, newComment.trim() && styles.sendButtonActive]}
             onPress={handleAddComment}
-            disabled={!newComment.trim()}
+            disabled={!newComment.trim() || commentLoading}
           >
             <Send 
               color={newComment.trim() ? "#FFFFFF" : "#9CA3AF"} 
@@ -328,6 +421,16 @@ export default function PostDetailScreen() {
           </View>
         </SafeAreaView>
       </Modal>
+
+      {/* Share Modal */}
+      {post && pet && (
+        <ShareModal
+          visible={shareModalVisible}
+          onClose={() => setShareModalVisible(false)}
+          post={post}
+          pet={pet}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -413,24 +516,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     padding: 16,
   },
-  actionButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 20,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  actionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#374151',
-  },
-  likedText: {
-    color: '#FF6B6B',
-  },
   captionContainer: {
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
@@ -459,35 +544,7 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     marginBottom: 16,
   },
-  commentItem: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
-  commentAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: 12,
-  },
-  commentContent: {
-    flex: 1,
-  },
-  commentText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    lineHeight: 18,
-    marginBottom: 4,
-  },
-  commentUser: {
-    fontFamily: 'Inter-Bold',
-    color: '#1F2937',
-  },
-  commentTime: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-  },
+
   commentInputContainer: {
     position: 'absolute',
     bottom: 0,
@@ -602,6 +659,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     height: 120,
     textAlignVertical: 'top',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
   },
   errorText: {
     fontSize: 16,

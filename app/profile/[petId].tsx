@@ -15,12 +15,14 @@ import { ArrowLeft, UserPlus, UserMinus, MessageCircle, Grid2x2 as Grid, User } 
 import { FlatGrid } from 'react-native-super-grid';
 import { petProfiles, followRelations, posts } from '@/data/mockData';
 import { PetProfile, Post } from '@/types/index';
+import { useMessaging } from '@/contexts/MessagingContext';
 
 const { width } = Dimensions.get('window');
 
 export default function PetProfileScreen() {
   const { petId } = useLocalSearchParams();
   const router = useRouter();
+  const { createChat } = useMessaging();
   const [pet, setPet] = useState<PetProfile | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -50,6 +52,21 @@ export default function PetProfileScreen() {
 
   const handlePostPress = (post: Post) => {
     router.push(`/post/${post.id}`);
+  };
+
+  const handleMessageOwner = async () => {
+    if (!pet) return;
+    
+    try {
+      // Pet sahibi ile chat oluştur
+      const currentUserId = 'user1'; // Bu auth context'ten gelecek
+      const chatId = await createChat([currentUserId, pet.ownerId]);
+      
+      // Chat ekranına git
+      router.push(`/chat/${chatId}`);
+    } catch (error) {
+      console.error('Chat oluşturulamadı:', error);
+    }
   };
 
   if (!pet) {
@@ -117,6 +134,41 @@ export default function PetProfileScreen() {
           <Text style={styles.petDetails}>{pet.breed} • {pet.species} • {pet.age}</Text>
           <Text style={styles.petGender}>{pet.gender}</Text>
           <Text style={styles.petBio}>{pet.bio}</Text>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.actionButtonsContainer}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.followActionButton]}
+            onPress={toggleFollow}
+          >
+            <LinearGradient
+              colors={isFollowing ? ['#f093fb', '#f5576c'] : ['#667eea', '#764ba2']}
+              style={styles.actionButtonGradient}
+            >
+              {isFollowing ? (
+                <UserMinus size={20} color="#FFFFFF" strokeWidth={2} />
+              ) : (
+                <UserPlus size={20} color="#FFFFFF" strokeWidth={2} />
+              )}
+              <Text style={styles.actionButtonText}>
+                {isFollowing ? 'Takibi Bırak' : 'Takip Et'}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.actionButton, styles.messageActionButton]}
+            onPress={handleMessageOwner}
+          >
+            <LinearGradient
+              colors={['#10B981', '#059669']}
+              style={styles.actionButtonGradient}
+            >
+              <MessageCircle size={20} color="#FFFFFF" strokeWidth={2} />
+              <Text style={styles.actionButtonText}>Mesaj Gönder</Text>
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
 
         {/* Stats */}
@@ -264,6 +316,42 @@ const styles = StyleSheet.create({
     color: '#374151',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    marginBottom: 8,
+    gap: 12,
+  },
+  actionButton: {
+    flex: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  followActionButton: {
+    // Specific styles for follow button if needed
+  },
+  messageActionButton: {
+    // Specific styles for message button if needed
+  },
+  actionButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    gap: 8,
+  },
+  actionButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
   },
   statsContainer: {
     flexDirection: 'row',

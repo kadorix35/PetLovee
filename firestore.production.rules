@@ -1,0 +1,157 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Kullanıcılar koleksiyonu - sadece kendi verilerini okuyabilir/yazabilir
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Pet profilleri - herkes okuyabilir, sadece sahibi yazabilir
+    match /pets/{petId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.ownerId &&
+        isValidPetData(request.resource.data);
+      allow update: if request.auth != null && 
+        request.auth.uid == resource.data.ownerId &&
+        isValidPetUpdate(request.resource.data, resource.data);
+      allow delete: if request.auth != null && request.auth.uid == resource.data.ownerId;
+    }
+    
+    // Gönderiler - herkes okuyabilir, sadece sahibi yazabilir
+    match /posts/{postId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.petId &&
+        isValidPostData(request.resource.data);
+      allow update: if request.auth != null && 
+        request.auth.uid == resource.data.petId &&
+        isValidPostUpdate(request.resource.data, resource.data);
+      allow delete: if request.auth != null && request.auth.uid == resource.data.petId;
+      
+      // Yorumlar alt koleksiyonu
+      match /comments/{commentId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null && 
+          request.auth.uid == request.resource.data.userId &&
+          isValidCommentData(request.resource.data);
+        allow update: if request.auth != null && 
+          request.auth.uid == resource.data.userId &&
+          isValidCommentUpdate(request.resource.data, resource.data);
+        allow delete: if request.auth != null && request.auth.uid == resource.data.userId;
+      }
+    }
+    
+    // Takip ilişkileri - sadece kendi takip verilerini yönetebilir
+    match /follows/{followId} {
+      allow read: if request.auth != null && 
+        (request.auth.uid == resource.data.followerId || request.auth.uid == resource.data.followedId);
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.followerId &&
+        request.resource.data.followerId != request.resource.data.followedId; // Kendini takip edemez
+      allow delete: if request.auth != null && request.auth.uid == resource.data.followerId;
+    }
+    
+    // Beğeniler - sadece kendi beğenilerini yönetebilir
+    match /likes/{likeId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId &&
+        isValidLikeData(request.resource.data);
+      allow delete: if request.auth != null && request.auth.uid == resource.data.userId;
+    }
+    
+    // Bildirimler - sadece sahibi okuyabilir/yazabilir
+    match /notifications/{notificationId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Veteriner klinikleri - herkes okuyabilir, sadece admin yazabilir
+    match /veterinary_clinics/{clinicId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Güvenlik logları - sadece admin okuyabilir
+    match /security_logs/{logId} {
+      allow read: if request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow write: if false; // Sadece sunucu yazabilir
+    }
+    
+    // Rate limiting - sadece sunucu erişebilir
+    match /rate_limits/{limitId} {
+      allow read, write: if false; // Sadece sunucu erişebilir
+    }
+    
+    // Session'lar - sadece sahibi okuyabilir/yazabilir
+    match /sessions/{sessionId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+    
+    // İki faktörlü kimlik doğrulama - sadece sahibi okuyabilir/yazabilir
+    match /two_factor/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Biometric kimlik doğrulama - sadece sahibi okuyabilir/yazabilir
+    match /biometric_auth/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Genel güvenlik - diğer tüm belgeler için erişimi reddet
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+  
+  // Veri doğrulama fonksiyonları
+  function isValidPetData(data) {
+    return data.keys().hasAll(['name', 'species', 'breed', 'age', 'ownerId']) &&
+           data.name is string && data.name.size() > 0 && data.name.size() <= 50 &&
+           data.species is string && data.species in ['dog', 'cat', 'bird', 'fish', 'other'] &&
+           data.breed is string && data.breed.size() > 0 && data.breed.size() <= 100 &&
+           data.age is number && data.age >= 0 && data.age <= 30 &&
+           data.ownerId is string && data.ownerId.size() > 0;
+  }
+  
+  function isValidPetUpdate(newData, existingData) {
+    return newData.ownerId == existingData.ownerId && // Sahip değiştirilemez
+           isValidPetData(newData);
+  }
+  
+  function isValidPostData(data) {
+    return data.keys().hasAll(['content', 'petId', 'mediaUrls']) &&
+           data.content is string && data.content.size() > 0 && data.content.size() <= 2000 &&
+           data.petId is string && data.petId.size() > 0 &&
+           data.mediaUrls is list && data.mediaUrls.size() <= 10;
+  }
+  
+  function isValidPostUpdate(newData, existingData) {
+    return newData.petId == existingData.petId && // Pet değiştirilemez
+           isValidPostData(newData);
+  }
+  
+  function isValidCommentData(data) {
+    return data.keys().hasAll(['content', 'userId']) &&
+           data.content is string && data.content.size() > 0 && data.content.size() <= 500 &&
+           data.userId is string && data.userId.size() > 0;
+  }
+  
+  function isValidCommentUpdate(newData, existingData) {
+    return newData.userId == existingData.userId && // Kullanıcı değiştirilemez
+           isValidCommentData(newData);
+  }
+  
+  function isValidLikeData(data) {
+    return data.keys().hasAll(['postId', 'userId']) &&
+           data.postId is string && data.postId.size() > 0 &&
+           data.userId is string && data.userId.size() > 0;
+  }
+}

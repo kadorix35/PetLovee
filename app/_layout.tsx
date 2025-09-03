@@ -7,6 +7,8 @@ import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { useFonts, Inter_400Regular, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { NotificationProvider } from '@/contexts/NotificationContext';
+import { MessagingProvider } from '@/contexts/MessagingContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -38,6 +40,11 @@ function RootLayoutContent() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="profile/[petId]" />
         <Stack.Screen name="post/[postId]" />
+        <Stack.Screen name="notifications" />
+        <Stack.Screen name="search" />
+        <Stack.Screen name="messages" />
+        <Stack.Screen name="chat/[chatId]" />
+        <Stack.Screen name="new-chat" />
         <Stack.Screen name="+not-found" />
       </Stack>
       <StatusBar style="light" />
@@ -49,7 +56,11 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <RootLayoutContent />
+        <NotificationProvider>
+          <MessagingProvider>
+            <RootLayoutContent />
+          </MessagingProvider>
+        </NotificationProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );
