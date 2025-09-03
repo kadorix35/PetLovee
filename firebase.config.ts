@@ -21,6 +21,28 @@ const firebaseConfig = {
   databaseURL: config.firebase.databaseURL
 };
 
+// Firebase Admin SDK için güvenli konfigürasyon
+// Production'da Workload Identity kullanılır, development'da environment variables
+export const getFirebaseAdminConfig = () => {
+  if (process.env.NODE_ENV === 'production') {
+    // Production'da Workload Identity kullanılır
+    // Service account key'leri kullanılmaz
+    return {
+      projectId: config.firebase.projectId,
+      // Workload Identity ile otomatik kimlik doğrulama
+      useWorkloadIdentity: true
+    };
+  } else {
+    // Development'da environment variables kullanılır
+    // Ancak service account key'leri base64 encoded olarak saklanmaz
+    return {
+      projectId: config.firebase.projectId,
+      // Development için güvenli konfigürasyon
+      useWorkloadIdentity: false
+    };
+  }
+};
+
 // Firebase servislerini export et
 export { auth, firestore, storage, database, messaging, analytics, config };
 

@@ -156,6 +156,11 @@ firebase.production.json
 google-services.production.json
 GoogleService-Info.production.plist
 
+# Firebase service account keys (SECURITY RISK - DO NOT COMMIT)
+*-firebase-adminsdk-*.json
+firebase-adminsdk-*.json
+service-account-*.json
+
 # Security sensitive files
 *.pem
 *.key

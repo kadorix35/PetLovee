@@ -15,6 +15,9 @@ export interface EnvironmentConfig {
   google: {
     webClientId: string;
   };
+  fcm: {
+    serverKey: string;
+  };
   app: {
     env: 'development' | 'production';
     debugMode: boolean;
@@ -41,6 +44,9 @@ const developmentConfig: EnvironmentConfig = {
   },
   google: {
     webClientId: "458534082610-i6v4digkbnivrnlap4bcp510lvkvsrpj.apps.googleusercontent.com"
+  },
+  fcm: {
+    serverKey: process.env.FCM_SERVER_KEY || ""
   },
   app: {
     env: 'development',
@@ -69,6 +75,9 @@ const productionConfig: EnvironmentConfig = {
   },
   google: {
     webClientId: process.env.GOOGLE_WEB_CLIENT_ID || ""
+  },
+  fcm: {
+    serverKey: process.env.FCM_SERVER_KEY || ""
   },
   app: {
     env: 'production',
@@ -102,7 +111,8 @@ export const validateConfig = (): void => {
       'FIREBASE_MESSAGING_SENDER_ID',
       'FIREBASE_APP_ID',
       'FIREBASE_DATABASE_URL',
-      'GOOGLE_WEB_CLIENT_ID'
+      'GOOGLE_WEB_CLIENT_ID',
+      'FCM_SERVER_KEY'
     ];
     
     const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
